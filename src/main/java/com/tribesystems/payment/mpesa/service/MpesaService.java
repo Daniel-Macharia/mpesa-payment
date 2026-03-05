@@ -5,7 +5,11 @@ import com.tribesystems.payment.common.dto.ApiResponse;
 import com.tribesystems.payment.mpesa.dto.*;
 import com.tribesystems.payment.common.utils.DateTimeUtil;
 import com.tribesystems.payment.transaction.mapper.TransactionMapper;
+import com.tribesystems.payment.transaction.model.ConfirmedTransaction;
+import com.tribesystems.payment.transaction.model.RegisterC2BCallbacksModel;
 import com.tribesystems.payment.transaction.model.Transaction;
+import com.tribesystems.payment.transaction.repository.ConfirmedTransactionRepository;
+import com.tribesystems.payment.transaction.repository.RegisterC2BCallbacksRepository;
 import com.tribesystems.payment.transaction.repository.TransactionRepository;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -14,7 +18,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 public class MpesaService {
@@ -39,6 +47,8 @@ public class MpesaService {
     private String passkey;
     @Value("${mpesa.shortcode}")
     private String shortCode;
+    @Value("${mpesa.c-to-b-shortcode}")
+    private String c2bShortCode;
     @Value("${mpesa.till-number}")
     private String tillNumber;
     @Value("${mpesa.callback-url}")
@@ -49,6 +59,16 @@ public class MpesaService {
     @Value("${mpesa.confirm-timeout-url}")
     private String confirmPaymentQueueTimeoutUrl;
 
+    @Value("${mpesa.register-c-to-b-callback-url}")
+    private String registerC2BCallbackUrlsUrl;
+    @Value("${mpesa.simulate-c-to-b-transaction}")
+    private String simulateC2BTransactionUrl;
+
+    @Value("${mpesa.c2b-validation-callback}")
+    private String c2bValidationCallbackUrl;
+    @Value("${mpesa.c2b-confirmation-callback}")
+    private String c2bConfirmationCallbackUrl;
+
     @Autowired
     private OkHttpClient client;
 
@@ -57,6 +77,12 @@ public class MpesaService {
 
     @Autowired
     private TransactionRepository transactionRepository;
+
+    @Autowired
+    private RegisterC2BCallbacksRepository registerCallbacksRepository;
+
+    @Autowired
+    private ConfirmedTransactionRepository confirmedTransactionRepository;
 
     private final Logger logger = LoggerFactory.getLogger(MpesaService.class);
 
@@ -178,7 +204,7 @@ public class MpesaService {
                 InitiatePaymentResponse initPmtResp = gson.fromJson(bodyStr, InitiatePaymentResponse.class);
 
                 logger.info("=========================================converting response to transaction=========================================");
-                Transaction transaction = TransactionMapper.initiatePaymentResponseToTransactionMapper(initPmtResp, "PENDING");
+                Transaction transaction = TransactionMapper.initiatePaymentResponseToTransactionMapper(initPmtResp, initiatePaymentDto, "PENDING");
                 logger.info("=========================================after converting response to transaction=========================================");
                 logger.info("=========================================saving transaction=========================================");
                 transactionRepository.save(transaction);
@@ -194,6 +220,8 @@ public class MpesaService {
                 logger.info("{}", resp.code());
                 logger.info("Failed to initiate payment");
                 logger.info("{}", resp);
+                String bodyStr = resp.body().string();
+                logger.info("Response Body: {}", bodyStr);
                 return new ApiResponse<>(
                         500,
                         "failed",
@@ -273,6 +301,8 @@ public class MpesaService {
             else{
                 logger.info("{}", response.code());
                 logger.info(response.message());
+                String bodyStr = response.body().string();
+                logger.info("Response Body: {}", bodyStr);
                 return new ApiResponse<>(
                         500,
                         "failed",
@@ -285,6 +315,241 @@ public class MpesaService {
                     500,
                     "failed",
                     new ConfirmPaymentStatusResponse(null, null, -1, null)
+            );
+        }
+    }
+
+    public ApiResponse<RegisterC2BUrlsResponse> registerC2BValidationAndConfirmationCallbacks()
+    {
+        try{
+            RegisterC2BUrlsRequest registerReq = new RegisterC2BUrlsRequest(
+                    c2bShortCode,
+                    "Completed",
+                    c2bConfirmationCallbackUrl,
+                    c2bValidationCallbackUrl
+            );
+            String token = authenticateWithMpesa().data().access_token();
+            logger.info("Sending Request: {}", registerReq);
+
+            RequestBody reqBody = RequestBody.create(
+                    gson.toJson(registerReq), MediaType.parse("application/json")
+            );
+
+            logger.info("=======================================Request Body=======================================");
+            logger.info("{}", reqBody.toString());
+            logger.info("Invoking Url: {}", registerC2BCallbackUrlsUrl);
+            Request request = new Request.Builder()
+                    .url(registerC2BCallbackUrlsUrl)
+                    .addHeader("Authorization", "Bearer " + token)
+                    .addHeader("Content-Type", "application/json")
+                    .post(reqBody)
+                    .build();
+
+            logger.info("Request body created successfully");
+            Response response = client.newCall(request).execute();
+            logger.info("Validation and Confirmation URLs registered successfully");
+            logger.info("Received Code: {}", response.code());
+            logger.info("Received Message: {}", response.message());
+
+            if(response.isSuccessful() && response.body() != null)
+            {
+                String bodyStr = response.body().string();
+                logger.info("Response Body: {}", bodyStr);
+                RegisterC2BUrlsResponse regResp = gson.fromJson(bodyStr, RegisterC2BUrlsResponse.class);
+                logger.info("======================== Register Urls Response ========================");
+                logger.info("{}", regResp);
+
+                logger.info("creating result model");
+                RegisterC2BCallbacksModel model = RegisterC2BCallbacksModel.builder()
+                        .registerCallbacksTransactionId(regResp.OriginatorCoversationID())
+                        .build();
+                logger.info("after creating result model");
+
+                logger.info("saving result");
+                registerCallbacksRepository.save(model);
+                logger.info("After saving result");
+
+                return new ApiResponse<>(
+                        200,
+                        "success",
+                        regResp
+                );
+            }
+            else{
+                logger.info("Failed to register callback urls");
+                String bodyStr = response.body().string();
+                logger.info("Response Body: {}", bodyStr);
+                return new ApiResponse<>(
+                        500,
+                        "failed",
+                        null
+                );
+            }
+        }catch (Exception e)
+        {
+            logger.error("Failed to register C2B transaction validation and confirmation urls");
+            logger.info("{}", e.getMessage());
+            return new ApiResponse<>(
+                    500,
+                    "failed",
+                    null
+            );
+        }
+    }
+
+    public ApiResponse<SimulatePaymentForC2BResponse> simulateTransaction(int amount)
+    {
+        try{
+
+            SimulatePaymentForC2BRequest request = new SimulatePaymentForC2BRequest(
+                    600984,
+                    "CustomerPayBillOnline",//"CustomerBuyGoodsOnline",
+                    amount,
+                    new BigInteger("254708374149"),
+                    "TestRef"
+            );
+            String token = authenticateWithMpesa().data().access_token();
+            logger.info("Sending Request: {}", request);
+
+            RequestBody reqBody = RequestBody.create(
+                    gson.toJson(request), MediaType.parse("application/json")
+            );
+
+            logger.info("=======================================Request Body=======================================");
+            logger.info("{}", reqBody.toString());
+            logger.info("Invoking Url: {}", simulateC2BTransactionUrl);
+            Request req = new Request.Builder()
+                    .url(simulateC2BTransactionUrl)
+                    .addHeader("Authorization", "Bearer " + token)
+                    .addHeader("Content-Type", "application/json")
+                    .post(reqBody)
+                    .build();
+
+            logger.info("Request body created successfully");
+            Response response = client.newCall(req).execute();
+            logger.info("Simulating payment transaction successful");
+            logger.info("Received Code: {}", response.code());
+            logger.info("Received Message: {}", response.message());
+
+            if(response.isSuccessful() && response.body() != null)
+            {
+                String bodyStr = response.body().string();
+                logger.info("Response Body: {}", bodyStr);
+                SimulatePaymentForC2BResponse simResp = gson.fromJson(bodyStr, SimulatePaymentForC2BResponse.class);
+                logger.info("======================== Simulate Transaction Response ========================");
+                logger.info("{}", simResp);
+
+                return new ApiResponse<>(
+                        200,
+                        "success",
+                        simResp
+                );
+            }
+            else{
+                logger.info("Failed to simulate transaction");
+                String bodyStr = response.body().string();
+                logger.info("Response Body: {}", bodyStr);
+                return new ApiResponse<>(
+                        500,
+                        "failed",
+                        null
+                );
+            }
+        }catch (Exception e)
+        {
+            logger.error("Failed to simulate C2B transaction");
+            logger.info("{}", e.getMessage());
+            return new ApiResponse<>(
+                    500,
+                    "failed",
+                    null
+            );
+        }
+    }
+
+    public void transactionValidationCallback(TransactionCallbackRequest request)
+    {
+        try{
+            logger.info("========================================== Received a transaction for validation ==========================================");
+            logger.info("{}", request);
+            logger.info("========================================== Saving the transaction for validation ==========================================");
+            confirmedTransactionRepository.save(TransactionMapper.transactionCallbackRequestToConfirmedTransactionMapper(request, "PENDING"));
+            logger.info("========================================== After saving the transaction for validation ==========================================");
+            logger.info("========================================== Completed validation of transaction ==========================================");
+        }catch(Exception e)
+        {
+            logger.error("Failed to validate transaction!");
+            logger.error("Reason: {}", e.getMessage());
+        }
+    }
+
+    public void transactionConfirmationCallback(TransactionCallbackRequest request)
+    {
+        try{
+            logger.info("========================================== Received a transaction for confirmation ==========================================");
+            logger.info("{}",request);
+            logger.info("============================ Checking if transaction exists =============================");
+            Optional<ConfirmedTransaction> result = confirmedTransactionRepository.findConfirmedTransactionByMpesaTransactionId(request.TransID());
+
+            if(result.isEmpty())
+            {
+                logger.info("====================================== Transaction does not exist. Creating a new record for the transaction ======================================");
+                confirmedTransactionRepository.save(TransactionMapper.transactionCallbackRequestToConfirmedTransactionMapper(request, "COMPLETED"));
+                logger.info("====================================== After Creating a new record for the transaction ======================================");
+            }
+            else{
+                logger.info("====================================== Transaction does exist. Updating existing record of the transaction ======================================");
+                ConfirmedTransaction trans = result.get();
+                trans.setMpesaTransactionStatus("COMPLETED");
+                confirmedTransactionRepository.save(trans);
+                logger.info("====================================== After Updating existing record of the transaction ======================================");
+            }
+            logger.info("========================================== Completed confirmation of transaction ==========================================");
+        }catch(Exception e)
+        {
+            logger.error("Failed to confirm transaction!");
+            logger.error("Reason: {}", e.getMessage());
+        }
+    }
+
+    public ApiResponse<List<Transaction>> getAllTransactions()
+    {
+        try{
+            return new ApiResponse<>(
+                    200,
+                    "success",
+                    transactionRepository.findAll()
+            );
+        }
+        catch (Exception e)
+        {
+            logger.error("Failed to fetch all stk push transactions");
+            logger.error("reason: {}", e.getMessage());
+            return new ApiResponse<>(
+                    500,
+                    "failed",
+                    new ArrayList<>()
+            );
+        }
+    }
+
+    public ApiResponse<List<ConfirmedTransaction>> getAllC2BTransactions()
+    {
+        try{
+            return new ApiResponse<>(
+                    200,
+                    "success",
+                    confirmedTransactionRepository.findAll()
+            );
+        }
+        catch (Exception e)
+        {
+            logger.error("Failed to fetch all stk push transactions");
+            logger.error("reason: {}", e.getMessage());
+            return new ApiResponse<>(
+                    500,
+                    "failed",
+                    new ArrayList<>()
             );
         }
     }

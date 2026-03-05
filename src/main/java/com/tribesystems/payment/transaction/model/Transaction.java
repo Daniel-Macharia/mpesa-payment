@@ -25,6 +25,11 @@ public class Transaction extends BaseEntity {
     private double ResponseCode;
 
     @Column(nullable = false)
+    private String customerPhoneNumber;
+    @Column(nullable = false)
+    private double amount;
+
+    @Column(nullable = false)
 //    @Enumerated(EnumType.STRING)
 //    private TransactionStatus transactionStatus;
     private String transactionStatus;

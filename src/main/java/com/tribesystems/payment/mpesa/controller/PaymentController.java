@@ -3,22 +3,23 @@ package com.tribesystems.payment.mpesa.controller;
 import com.tribesystems.payment.common.dto.ApiResponse;
 import com.tribesystems.payment.mpesa.dto.*;
 import com.tribesystems.payment.mpesa.service.MpesaService;
+import com.tribesystems.payment.transaction.model.ConfirmedTransaction;
+import com.tribesystems.payment.transaction.model.Transaction;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 import static com.tribesystems.payment.common.constants.Constants.API;
 import static com.tribesystems.payment.common.constants.Constants.PAYMENTS;
 import static com.tribesystems.payment.mpesa.constants.MpesaConstants.*;
 
 @RestController
-@RequestMapping(API + PAYMENTS + MPESA)
+@RequestMapping(API + PAYMENTS)
 @Tag(name = "mpesa payment controller", description = "provides endpoint to facilitate payments via mpesa")
 public class PaymentController {
 
@@ -48,6 +49,14 @@ public class PaymentController {
     )
     {
         return mpesaService.checkTransactionStatus(checkTxnStatusDto);
+    }
+
+    @GetMapping(GET_ALL_TRANSACTIONS)
+    @Operation(summary = "get all transactions", description = "retrieve all STK push transaction records")
+    public ApiResponse<List<Transaction>> getAllTransactions()
+    {
+        logger.info("========================== Fetching all STK push transactions ======================");
+        return mpesaService.getAllTransactions();
     }
 
     @PostMapping(CONFIRM_PAYMENT_RESULT)
@@ -93,5 +102,47 @@ public class PaymentController {
                 "success",
                 "mpesa payment callback received payload"
         );
+    }
+
+    @PostMapping(REGISTER_C_2_B_URL_CALLBACKS)
+    @Operation(summary = "trigger register c2b callbacks", description = "register callbacks for payment validation and confirmation notifications")
+    public ApiResponse<RegisterC2BUrlsResponse> registerC2BCallbacks()
+    {
+        logger.info("========================== Registering C2B payment notification callbacks ======================");
+        return mpesaService.registerC2BValidationAndConfirmationCallbacks();
+    }
+
+    @PostMapping(SIMULATE_C2B_TRANSACTION)
+    @Operation(summary = "simulate c2b transaction to test callbacks", description = "simulate transaction to test validation and confirmation callbacks")
+    public ApiResponse<SimulatePaymentForC2BResponse> simulateC2BTransaction(@RequestParam("amount") int amount)
+    {
+        logger.info("========================== simulating a C2B transaction ======================");
+        return mpesaService.simulateTransaction(amount);
+    }
+
+    @PostMapping(C2B_VALIDATION)
+    @Operation(summary = "validate c2b transactions", description = "validate c2b transactions")
+    public void c2bTransactionValidation(@RequestBody TransactionCallbackRequest req)
+    {
+        logger.info("========================== Received a C2B transaction validation request ======================");
+        logger.info("Validating transaction: {}", req);
+        mpesaService.transactionValidationCallback(req);
+    }
+
+    @PostMapping(C2B_CONFIRMATION)
+    @Operation(summary = "confirm c2b transactions", description = "receive confirmation notifications for c2b transactions")
+    public void c2bTransactionConfirmation(@RequestBody TransactionCallbackRequest req)
+    {
+        logger.info("========================== Received a C2B transaction confirmation notification ======================");
+        logger.info("Confirmed transaction: {}", req);
+        mpesaService.transactionConfirmationCallback(req);
+    }
+
+    @GetMapping(C2B_GET_ALL_TRANSACTIONS)
+    @Operation(summary = "get all transactions", description = "retrieve all C2B transaction records")
+    public ApiResponse<List<ConfirmedTransaction>> c2bGetAllTransactions()
+    {
+        logger.info("========================== Fetching all C2B transactions ======================");
+        return mpesaService.getAllC2BTransactions();
     }
 }
