@@ -33,6 +33,8 @@ public class MpesaService {
 
     @Value("${mpesa.initiate-stk-push-url}")
     private String initiateStkPushUrl;
+    @Value("${mpesa.check-stk-push-txn-url}")
+    private String checkStkPushTxnUrl;
     @Value("${mpesa.query-txn-status}")
     private String queryTxnStatusUrl;
 
@@ -253,6 +255,112 @@ public class MpesaService {
                     500,
                     "failed",
                     new InitiatePaymentResponse(null, null, -1, null, null)
+            );
+        }
+    }
+
+    public ApiResponse<CheckSTKPushStatusResponse> checkStkPushStatus(CheckSTKPushStatusRequest checkStkPushStatusRequest)
+    {
+        try{
+            String timestamp = DateTimeUtil.formatedDateTime();
+            String password = getMpesaPassword();
+            String testDesc = "Payment";
+            String testAccRef = accountRef;
+            String tillTransactionType = "CustomerPayBillOnline";
+
+            CheckSTKPushStatus checkReq = new CheckSTKPushStatus(
+                    shortCode,
+                    password,
+                    timestamp,
+                    checkStkPushStatusRequest.CheckoutRequestId()
+            );
+
+            logger.info("==================================================== Request Body ====================================================");
+            logger.info("{}", checkReq);
+
+            RequestBody body = RequestBody.create(gson.toJson(checkReq), MediaType.get("application/json"));
+            logger.info("==================================================== Encoded Request Body ====================================================");
+            logger.info("{}", body);
+
+            String token = authenticateWithMpesa().data().access_token();
+
+            if(token == null)
+            {
+                logger.info("Failed to authenticate with mpesa");
+                logger.info("Token: {}", token);
+                return new ApiResponse<>(
+                        500,
+                        "failed",
+                        new CheckSTKPushStatusResponse(-1, null, null,
+                                null, null, null)
+                );
+            }
+
+            Request req = new Request.Builder()
+                    .url(checkStkPushTxnUrl)
+                    .addHeader("Authorization", "Bearer " + token)
+                    .addHeader("Content-Type", "application/json")
+                    .post(body)
+                    .build();
+
+            logger.info("===================================checking stk push status===================================");
+            logger.info("{}", req);
+
+            Response resp = client.newCall(req).execute();
+
+            if(resp.isSuccessful() && resp.body() != null)
+            {
+                logger.info("=================================== Status code ===================================");
+                logger.info("{}", resp.code());
+                String bodyStr = resp.body().string();
+                logger.info("{}", bodyStr);
+                CheckSTKPushStatusResponse checkStkResp = gson.fromJson(bodyStr, CheckSTKPushStatusResponse.class);
+
+                logger.info("=========================================converting response to transaction=========================================");
+                Transaction transaction = TransactionMapper.checkStkPushPaymentResponseToTransactionMapper(checkStkResp,
+                        checkStkResp.ResultCode().equals("0") ? "SUCCESS" : "FAILED"
+                );
+                logger.info("=========================================after converting response to transaction=========================================");
+                logger.info("=========================================saving transaction=========================================");
+                Optional<Transaction> t = transactionRepository.findByCheckoutRequestID(checkStkPushStatusRequest.CheckoutRequestId());
+
+                if(t.isPresent())//only update the transaction if it exists
+                {
+                    Transaction txn = t.get();
+                    transaction.setTransactionId(txn.getTransactionId());
+                    transaction.setAmount(txn.getAmount());
+                    transaction.setCustomerPhoneNumber(txn.getCustomerPhoneNumber());
+                    transactionRepository.save(transaction);
+                }
+                logger.info("=========================================successfully saved transaction=========================================");
+                return new ApiResponse<>(
+                        200,
+                        "success",
+                        checkStkResp
+                );
+            }
+            else{
+                logger.info("=================================== Status code ===================================");
+                logger.info("{}", resp.code());
+                logger.info("Failed to check stk push status");
+                logger.info("{}", resp);
+                String bodyStr = resp.body().string();
+                logger.info("Response Body: {}", bodyStr);
+                return new ApiResponse<>(
+                        500,
+                        "failed",
+                        new CheckSTKPushStatusResponse(-1, null, null,
+                                null, null, null)
+                );
+            }
+        }catch(Exception e)
+        {
+            logger.error("Failed to check stk push status: {}", e.getMessage());
+            return new ApiResponse<>(
+                    500,
+                    "failed",
+                    new CheckSTKPushStatusResponse(-1, null, null,
+                            null, null,  null)
             );
         }
     }

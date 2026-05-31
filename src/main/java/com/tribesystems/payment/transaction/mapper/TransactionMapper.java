@@ -20,6 +20,21 @@ public class TransactionMapper {
                 .ResponseCode(resp.ResponseCode())
                 .customerPhoneNumber(dto.phoneNumber())
                 .amount(dto.amount())
+                .resultCode(resp.ResponseCode() + "")
+                .resultDescription(resp.ResponseDescription())
+                .build();
+    }
+
+    public static Transaction checkStkPushPaymentResponseToTransactionMapper(CheckSTKPushStatusResponse resp, String status)
+    {
+        return Transaction.builder()
+                .MerchantRequestID(resp.MerchantRequestID())
+                .CheckoutRequestID(resp.CheckoutRequestID())
+                .transactionStatus(status)
+                .transactionType(TransactionType.MPESA)
+                .ResponseCode(resp.ResponseCode())
+                .resultCode(resp.ResultCode())
+                .resultDescription(resp.ResultDesc())
                 .build();
     }
 

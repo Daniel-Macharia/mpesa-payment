@@ -44,6 +44,15 @@ public class PaymentController {
         return mpesaService.initiatePayment(initiatePayment);
     }
 
+    @PostMapping(CHECK_STK_PUSH_STATUS)
+    @Operation(summary = "check stk push payment status", description = "check stk push transaction status")
+    public ApiResponse<CheckSTKPushStatusResponse> checkStkPushTransactionStatus(
+            @RequestBody CheckSTKPushStatusRequest request
+            )
+    {
+        return mpesaService.checkStkPushStatus(request);
+    }
+
     @PostMapping(CONFIRM_PAYMENT)
     @Operation(summary = "confirm status of transaction", description = "check the status of the transaction specified by the originator conversation ID")
     public ApiResponse<ConfirmPaymentStatusResponse> confirmPaymentStatus(

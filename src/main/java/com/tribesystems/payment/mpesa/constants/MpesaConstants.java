@@ -4,6 +4,7 @@ public class MpesaConstants {
     public static final String MPESA = "/mpesa";
 
     public static final String INITIATE_STK_PUSH = "/initiate-stk-push";
+    public static final String CHECK_STK_PUSH_STATUS = "/check-stk-push-status";
     public static final String CONFIRM_PAYMENT = "/confirm-payment";
     public static final String GET_ALL_TRANSACTIONS = "/all";
 
