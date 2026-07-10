@@ -102,6 +102,9 @@ public class MpesaService {
     @Autowired
     private B2BTransactionRepository b2BTransactionRepository;
 
+    @Autowired
+    private PaymentReferenceGenerator paymentRefGenerator;
+
     private final Logger logger = LoggerFactory.getLogger(MpesaService.class);
 
     private String generateUniqueueId(){return UUID.randomUUID().toString();}
@@ -199,7 +202,7 @@ public class MpesaService {
                 return new ApiResponse<>(
                         500,
                         "failed",
-                        new InitiatePaymentResponse(null, null, -1, null, null)
+                        new InitiatePaymentResponse(null, null, null, -1, null, null)
                 );
             }
 
@@ -224,10 +227,12 @@ public class MpesaService {
                 InitiatePaymentResponse initPmtResp = gson.fromJson(bodyStr, InitiatePaymentResponse.class);
 
                 logger.info("=========================================converting response to transaction=========================================");
-                Transaction transaction = TransactionMapper.initiatePaymentResponseToTransactionMapper(initPmtResp, initiatePaymentDto, "PENDING");
+                String paymentRef = paymentRefGenerator.generatePaymentReference();
+                Transaction transaction = TransactionMapper.initiatePaymentResponseToTransactionMapper(paymentRef, initPmtResp, initiatePaymentDto, "PENDING");
                 logger.info("=========================================after converting response to transaction=========================================");
                 logger.info("=========================================saving transaction=========================================");
                 transactionRepository.save(transaction);
+                initPmtResp.setPaymentReference(paymentRef);
                 logger.info("=========================================successfully saved transaction=========================================");
                 return new ApiResponse<>(
                         200,
@@ -245,7 +250,7 @@ public class MpesaService {
                 return new ApiResponse<>(
                         500,
                         "failed",
-                        new InitiatePaymentResponse(null, null, -1, null, null)
+                        new InitiatePaymentResponse(null, null, null, -1, null, null)
                 );
             }
         }catch(Exception e)
@@ -254,7 +259,7 @@ public class MpesaService {
             return new ApiResponse<>(
                     500,
                     "failed",
-                    new InitiatePaymentResponse(null, null, -1, null, null)
+                    new InitiatePaymentResponse(null, null, null, -1, null, null)
             );
         }
     }
@@ -268,11 +273,25 @@ public class MpesaService {
             String testAccRef = accountRef;
             String tillTransactionType = "CustomerPayBillOnline";
 
+            Optional<Transaction> txnRetrieved = transactionRepository.findByPaymentReference(checkStkPushStatusRequest.paymentReference());
+
+            if(txnRetrieved.isEmpty())
+            {
+                logger.info("No transaction with the specified payment reference exists!");
+                logger.info("Payment reference: {}", checkStkPushStatusRequest.paymentReference());
+                return new ApiResponse<>(
+                        500,
+                        "failed",
+                        new CheckSTKPushStatusResponse(-1, null, null,
+                                null, null, null)
+                );
+            }
+
             CheckSTKPushStatus checkReq = new CheckSTKPushStatus(
                     shortCode,
                     password,
                     timestamp,
-                    checkStkPushStatusRequest.CheckoutRequestId()
+                    txnRetrieved.get().getCheckoutRequestID()
             );
 
             logger.info("==================================================== Request Body ====================================================");
@@ -316,23 +335,28 @@ public class MpesaService {
                 logger.info("{}", bodyStr);
                 CheckSTKPushStatusResponse checkStkResp = gson.fromJson(bodyStr, CheckSTKPushStatusResponse.class);
 
-                logger.info("=========================================converting response to transaction=========================================");
-                Transaction transaction = TransactionMapper.checkStkPushPaymentResponseToTransactionMapper(checkStkResp,
-                        checkStkResp.ResultCode().equals("0") ? "SUCCESS" : "FAILED"
-                );
-                logger.info("=========================================after converting response to transaction=========================================");
-                logger.info("=========================================saving transaction=========================================");
-                Optional<Transaction> t = transactionRepository.findByCheckoutRequestID(checkStkPushStatusRequest.CheckoutRequestId());
+//                logger.info("=========================================converting response to transaction=========================================");
+//                Transaction transaction = TransactionMapper.checkStkPushPaymentResponseToTransactionMapper(checkStkResp,
+//                        checkStkResp.ResultCode().equals("0") ? "SUCCESS" : "FAILED"
+//                );
+//                logger.info("=========================================after converting response to transaction=========================================");
 
-                if(t.isPresent())//only update the transaction if it exists
-                {
-                    Transaction txn = t.get();
-                    transaction.setTransactionId(txn.getTransactionId());
-                    transaction.setAmount(txn.getAmount());
-                    transaction.setCustomerPhoneNumber(txn.getCustomerPhoneNumber());
-                    transactionRepository.save(transaction);
-                }
-                logger.info("=========================================successfully saved transaction=========================================");
+//                Optional<Transaction> t = transactionRepository.findByCheckoutRequestID(txnRetrieved.get().getCheckoutRequestID());
+//                Optional<Transaction> t = transactionRepository.findByCheckoutRequestID(checkStkPushStatusRequest.CheckoutRequestId());
+
+//                if(t.isPresent())//only update the transaction if it exists
+//                {
+                    logger.info("=========================================saving transaction=========================================");
+                    Transaction txn = txnRetrieved.get();
+//                    transaction.setTransactionId(txn.getTransactionId());
+//                    transaction.setAmount(txn.getAmount());
+//                    transaction.setCustomerPhoneNumber(txn.getCustomerPhoneNumber());
+//                    transactionRepository.save(transaction);
+                    txn.setTransactionStatus(checkStkResp.ResultCode().equals("0") ? "SUCCESS" : "FAILED");
+                    transactionRepository.save(txn);
+                    logger.info("=========================================successfully saved transaction=========================================");
+//                }
+
                 return new ApiResponse<>(
                         200,
                         "success",
@@ -378,12 +402,26 @@ public class MpesaService {
             String remarks = "OK";
             String occasion = "OK";
 
+            Optional<Transaction> txnRetrieved = transactionRepository.findByPaymentReference(checkTxnStatusDto.paymentReference());
+
+            if(txnRetrieved.isEmpty())
+            {
+                logger.info("No transaction with the specified payment reference exists!");
+                logger.info("Payment reference: {}", checkTxnStatusDto.paymentReference());
+                return new ApiResponse<>(
+                        500,
+                        "failed",
+                        new ConfirmPaymentStatusResponse(null, null, -1, null)
+                );
+            }
+
             CheckTxnStatusRequest reqData = new CheckTxnStatusRequest(
                     initiator,
                     securityCredential,
                     commandId,
                     txnId,
-                    checkTxnStatusDto.originatorConversationId(),
+//                    checkTxnStatusDto.originatorConversationId(),
+                    txnRetrieved.get().getCheckoutRequestID(),
                     shortCode,
                     idType,
                     confirmPaymentResultUrl,

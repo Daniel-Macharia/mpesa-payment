@@ -1,10 +1,19 @@
 package com.tribesystems.payment.mpesa.dto;
 
-public record InitiatePaymentResponse(
-    String MerchantRequestID,
-    String CheckoutRequestID,
-    double ResponseCode,
-    String ResponseDescription,
-    String CustomerMessage
-) {
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@NoArgsConstructor
+@AllArgsConstructor
+@Getter
+@Setter
+public class InitiatePaymentResponse{
+    private String paymentReference;
+    private String MerchantRequestID;
+    private String CheckoutRequestID;
+    private double ResponseCode;
+    private String ResponseDescription;
+    private String CustomerMessage;
 }

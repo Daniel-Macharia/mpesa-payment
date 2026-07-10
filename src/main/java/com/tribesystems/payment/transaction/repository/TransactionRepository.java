@@ -20,4 +20,6 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     Optional<Transaction> findByCheckoutRequestID(@Param("checkoutRequestId") String checkoutRequestId);
 
     List<Transaction> findByTransactionStatus(String transactionStatus);
+
+    Optional<Transaction> findByPaymentReference(String paymentReference);
 }

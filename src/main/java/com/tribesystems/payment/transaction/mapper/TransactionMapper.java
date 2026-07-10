@@ -10,18 +10,19 @@ import jakarta.persistence.Column;
 
 public class TransactionMapper {
 
-    public static Transaction initiatePaymentResponseToTransactionMapper(InitiatePaymentResponse resp, InitiatePaymentDto dto, String status)
+    public static Transaction initiatePaymentResponseToTransactionMapper( String paymentReference, InitiatePaymentResponse resp, InitiatePaymentDto dto, String status)
     {
         return Transaction.builder()
-                .MerchantRequestID(resp.MerchantRequestID())
-                .CheckoutRequestID(resp.CheckoutRequestID())
+                .paymentReference(paymentReference)
+                .MerchantRequestID(resp.getMerchantRequestID())
+                .CheckoutRequestID(resp.getCheckoutRequestID())
                 .transactionStatus(status)
                 .transactionType(TransactionType.MPESA)
-                .ResponseCode(resp.ResponseCode())
+                .ResponseCode(resp.getResponseCode())
                 .customerPhoneNumber(dto.phoneNumber())
                 .amount(dto.amount())
-                .resultCode(resp.ResponseCode() + "")
-                .resultDescription(resp.ResponseDescription())
+                .resultCode(resp.getResponseCode() + "")
+                .resultDescription(resp.getResponseDescription())
                 .build();
     }
 

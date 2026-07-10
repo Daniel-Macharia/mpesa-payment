@@ -4,6 +4,7 @@ package com.tribesystems.payment.common.model;
 import jakarta.persistence.Column;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
+import lombok.Getter;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
 //audit all entities for creation and updates
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
+@Getter
 public class BaseEntity {
     @CreatedDate
     @Column(updatable = false)

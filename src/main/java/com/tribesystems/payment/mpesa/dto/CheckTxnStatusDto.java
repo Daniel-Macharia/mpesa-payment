@@ -1,6 +1,7 @@
 package com.tribesystems.payment.mpesa.dto;
 
 public record CheckTxnStatusDto(
-        String originatorConversationId
+//        String originatorConversationId
+        String paymentReference
 ) {
 }
