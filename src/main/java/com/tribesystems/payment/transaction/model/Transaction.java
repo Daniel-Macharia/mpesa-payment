@@ -17,7 +17,7 @@ public class Transaction extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long transactionId;
 
-    @Column(nullable = true, unique = false)
+    @Column(nullable = false, unique = true)
     private String paymentReference;
 
     @Column(nullable = false)

@@ -32,7 +32,7 @@ public class UpdateTransactionStatusSchedule {
     }
 
 
-    @Scheduled(cron = "0 * * * * *")//check and update status every minute
+//    @Scheduled(cron = "0 * * * * *")//check and update status every minute
     public void updateNullPaymentReferencesOnTransactions()
     {
         try{

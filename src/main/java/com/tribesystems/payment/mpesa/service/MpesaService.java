@@ -167,11 +167,13 @@ public class MpesaService {
     public ApiResponse<InitiatePaymentResponse> initiatePayment(InitiatePaymentDto initiatePaymentDto)
     {
         try{
+            String paymentRef = paymentRefGenerator.generatePaymentReference();
             String timestamp = DateTimeUtil.formatedDateTime();
             String password = getMpesaPassword();
             String testDesc = "Payment";
-            String testAccRef = accountRef;
-            String tillTransactionType = "CustomerPayBillOnline";
+            String testAccRef = paymentRef.substring(1, 11);
+            String tillTransactionType = "CustomerBuyGoodsOnline";
+
 
             InitiatePaymentRequest initReq = new InitiatePaymentRequest(
                     password,
@@ -227,7 +229,7 @@ public class MpesaService {
                 InitiatePaymentResponse initPmtResp = gson.fromJson(bodyStr, InitiatePaymentResponse.class);
 
                 logger.info("=========================================converting response to transaction=========================================");
-                String paymentRef = paymentRefGenerator.generatePaymentReference();
+
                 Transaction transaction = TransactionMapper.initiatePaymentResponseToTransactionMapper(paymentRef, initPmtResp, initiatePaymentDto, "PENDING");
                 logger.info("=========================================after converting response to transaction=========================================");
                 logger.info("=========================================saving transaction=========================================");
