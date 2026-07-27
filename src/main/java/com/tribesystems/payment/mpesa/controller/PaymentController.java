@@ -1,5 +1,6 @@
 package com.tribesystems.payment.mpesa.controller;
 
+import com.google.gson.Gson;
 import com.tribesystems.payment.common.dto.ApiResponse;
 import com.tribesystems.payment.mpesa.dto.*;
 import com.tribesystems.payment.mpesa.service.MpesaService;
@@ -28,11 +29,14 @@ public class PaymentController {
     private final Logger logger = LoggerFactory.getLogger(PaymentController.class);
 
     private final MpesaService mpesaService;
+    private final Gson gson;
+
 
     @Autowired
-    public PaymentController(MpesaService mpesaService)
+    public PaymentController(MpesaService mpesaService, Gson gson)
     {
         this.mpesaService = mpesaService;
+        this.gson = gson;
     }
 
     @PostMapping(INITIATE_STK_PUSH)
@@ -99,21 +103,39 @@ public class PaymentController {
                 "confirm payment status timeout callback received payload"
         );
     }
+//
+//    @PostMapping(INITIATE_STK_PUSH_CALLBACK)
+//    @Operation(summary = "initiate stk push callback", description = "invoked by daraja api with the result of an stk push")
+//    public ApiResponse<String> mpesaPaymentCallback(
+//            @RequestBody StkCallback stkCallback
+//    )
+//    {
+//        logger.info("========================== Received stk callback ======================");
+//        logger.error("{}", stkCallback);
+//        return new ApiResponse<>(
+//                200,
+//                "success",
+//                "mpesa payment callback received payload"
+//        );
+//    }
+@PostMapping(INITIATE_STK_PUSH_CALLBACK)
+@Operation(summary = "initiate stk push callback", description = "invoked by daraja api with the result of an stk push")
+public ApiResponse<String> mpesaPaymentCallback(@RequestBody String rawBody)
+{
+    logger.info("========================== Received stk callback (raw) ======================");
+    logger.info("Raw body: {}", rawBody);
 
-    @PostMapping(INITIATE_STK_PUSH_CALLBACK)
-    @Operation(summary = "initiate stk push callback", description = "invoked by daraja api with the result of an stk push")
-    public ApiResponse<String> mpesaPaymentCallback(
-            @RequestBody StkCallback stkCallback
-    )
-    {
-        logger.info("========================== Received stk callback ======================");
-        logger.error("{}", stkCallback);
-        return new ApiResponse<>(
-                200,
-                "success",
-                "mpesa payment callback received payload"
-        );
+    try {
+        StkCallbackEnvelope envelope = gson.fromJson(rawBody, StkCallbackEnvelope.class);
+        StkCallback stkCallback = envelope.Body().stkCallback();
+        logger.info("Parsed successfully: {}", stkCallback);
+        // mpesaService.processStkCallback(stkCallback); // wire this in once parsing is confirmed
+    } catch (Exception e) {
+        logger.error("Failed to parse STK callback body. Raw payload was: {}", rawBody, e);
     }
+
+    return new ApiResponse<>(200, "success", "mpesa payment callback received payload");
+}
 
     @PostMapping(REGISTER_C_2_B_URL_CALLBACKS)
     @Operation(summary = "trigger register c2b callbacks", description = "register callbacks for payment validation and confirmation notifications")
