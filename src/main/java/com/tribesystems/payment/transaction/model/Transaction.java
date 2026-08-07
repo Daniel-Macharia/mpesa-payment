@@ -20,12 +20,17 @@ public class Transaction extends BaseEntity {
     @Column(nullable = false, unique = true)
     private String paymentReference;
 
+    @Column(nullable = true, unique = true)
+    private String mpesaReceiptNumber;
+
     @Column(nullable = false)
     private String MerchantRequestID;
     @Column(nullable = false)
     private String CheckoutRequestID;
     @Column(nullable = false)
     private double ResponseCode;
+    @Column()
+    private String ResponseDescription;
 
     @Column(nullable = false)
     private String customerPhoneNumber;
@@ -35,6 +40,9 @@ public class Transaction extends BaseEntity {
     private String resultCode;
     @Column()
     private String resultDescription;
+
+    @Column(nullable = false)
+    private boolean isConfirmedByMpesaCallback = false;
 
     @Column(nullable = false)
 //    @Enumerated(EnumType.STRING)
