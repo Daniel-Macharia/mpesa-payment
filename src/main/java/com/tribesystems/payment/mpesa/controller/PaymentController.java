@@ -77,11 +77,11 @@ public class PaymentController {
     @PostMapping(CONFIRM_PAYMENT_RESULT)
     @Operation(summary = "confirm payment result callback", description = "invoked by daraja api with the result of the payment confirmation")
     public ApiResponse<String> confirmPaymentStatusResultCallback(
-            @RequestBody Result result
+            @RequestBody String rawBody
     )
     {
         logger.info("=========================== received result in confirm payment timeout callback ===========================");
-        logger.error("{}", result);
+        logger.error("{}", rawBody);
         return new ApiResponse<>(
                 200,
                 "success",
@@ -92,11 +92,11 @@ public class PaymentController {
     @PostMapping(CONFIRM_PAYMENT_TIMEOUT)
     @Operation(summary = "confirm payment timeout callback", description = "invoked by daraja api with the result of the payment confirmation that timed out")
     public ApiResponse<String> confirmPaymentStatusTimeoutCallback(
-            @RequestBody Result result
+            @RequestBody String rawBody
     )
     {
         logger.info("=========================== received result in confirm payment timeout callback ===========================");
-        logger.error("{}", result);
+        logger.error("{}", rawBody);
         return new ApiResponse<>(
                 200,
                 "success",
@@ -129,7 +129,20 @@ public ApiResponse<String> mpesaPaymentCallback(@RequestBody String rawBody)
         StkCallbackEnvelope envelope = gson.fromJson(rawBody, StkCallbackEnvelope.class);
         StkCallback stkCallback = envelope.Body().stkCallback();
         logger.info("Parsed successfully: {}", stkCallback);
-        // mpesaService.processStkCallback(stkCallback); // wire this in once parsing is confirmed
+
+        if(stkCallback.CallbackMetadata() != null && stkCallback.CallbackMetadata().Item() != null)
+        {
+            logger.info("================================= callback metadata items ===================================");
+            for(CallbackMetadataItem item : stkCallback.CallbackMetadata().Item())
+            {
+                logger.info("{}", item);
+            }
+            logger.info("================================= end of callback metadata items ===================================");
+        }
+        else{
+            logger.info("================================= CallbackMetadata Items is null ===================================");
+        }
+         mpesaService.processStkPushCallback(stkCallback); // wire this in once parsing is confirmed
     } catch (Exception e) {
         logger.error("Failed to parse STK callback body. Raw payload was: {}", rawBody, e);
     }
@@ -155,20 +168,24 @@ public ApiResponse<String> mpesaPaymentCallback(@RequestBody String rawBody)
 
     @PostMapping(C2B_VALIDATION)
     @Operation(summary = "validate c2b transactions", description = "validate c2b transactions")
-    public ValidateC2BPaymentResponse c2bTransactionValidation(@RequestBody TransactionCallbackRequest req)
+    public ValidateC2BPaymentResponse c2bTransactionValidation(@RequestBody String rawBody)
     {
         logger.info("========================== Received a C2B transaction validation request ======================");
-        logger.info("Validating transaction: {}", req);
-        return mpesaService.transactionValidationCallback(req);
+        logger.info("Validating transaction: {}", rawBody);
+//        return mpesaService.transactionValidationCallback(req);
+        return new ValidateC2BPaymentResponse(
+                "200",
+                "Success"
+        );
     }
 
     @PostMapping(C2B_CONFIRMATION)
     @Operation(summary = "confirm c2b transactions", description = "receive confirmation notifications for c2b transactions")
-    public void c2bTransactionConfirmation(@RequestBody TransactionCallbackRequest req)
+    public void c2bTransactionConfirmation(@RequestBody String rawBody)
     {
         logger.info("========================== Received a C2B transaction confirmation notification ======================");
-        logger.info("Confirmed transaction: {}", req);
-        mpesaService.transactionConfirmationCallback(req);
+        logger.info("Confirmed transaction: {}", rawBody);
+//        mpesaService.transactionConfirmationCallback(req);
     }
 
     @GetMapping(C2B_GET_ALL_TRANSACTIONS)
@@ -199,23 +216,25 @@ public ApiResponse<String> mpesaPaymentCallback(@RequestBody String rawBody)
 
     @PostMapping(B2C_CALLBACK_RESULT)
     @Operation(summary = "Receive B2C callback result", description = "Receive and process B2C Callback result")
-    public void b2cCallbackResult(@RequestBody B2CCallbackResult result)
+    public void b2cCallbackResult(@RequestBody String rawBody)
     {
         logger.info("========================== Received B2C Callback Result ======================");
-        mpesaService.processB2CCallbackResult(result);
+        logger.info("B2C Callback: {}", rawBody);
+//        mpesaService.processB2CCallbackResult(result);
     }
 
     @PostMapping(B2C_CALLBACK_TIMEOUT)
     @Operation(summary = "Receive B2C callback timeout", description = "Receive and process B2C Callback result")
-    public void b2cCallbackTimeout(@RequestBody B2CCallbackResult result)
+    public void b2cCallbackTimeout(@RequestBody String rawBody)
     {
         logger.info("========================== Received B2C Callback Timeout ======================");
-        mpesaService.processB2CCallbackTimeout(result);
+        logger.info("B2C Callback: {}", rawBody);
+//        mpesaService.processB2CCallbackTimeout(result);
     }
 
     @PostMapping(B2B_INITIATE_PAYMENT)
     @Operation(summary = "Initiate B2B payment request", description = "Initiate B2B payment request")
-    public ApiResponse<B2BTransactionResponse> b2cCallbackTimeout(@RequestBody InitiateB2BTransactionDto dto)
+    public ApiResponse<B2BTransactionResponse> initiateB2BTransaction(@RequestBody InitiateB2BTransactionDto dto)
     {
         logger.info("========================== Initiating B2B Payment ======================");
         return mpesaService.initiateB2Bpayment(dto);
@@ -223,10 +242,11 @@ public ApiResponse<String> mpesaPaymentCallback(@RequestBody String rawBody)
 
     @PostMapping(B2B_PAYMENT_REQUEST_CALLBACK)
     @Operation(summary = "Process B2B transaction responses from daraja", description = "Process B2B transaction responses from daraja")
-    public void b2bCallback(@RequestBody B2BTransactionCallbackRequest response)
+    public void b2bCallback(@RequestBody String rawBody)
     {
         logger.info("========================== Processing B2B Transaction Response ======================");
-        mpesaService.processB2BTransactionCallbackRequest(response);
+        logger.info("B2B Callback: {}", rawBody);
+//        mpesaService.processB2BTransactionCallbackRequest(response);
     }
 
     @GetMapping(B2B_GET_ALL_TRANSACTIONS)

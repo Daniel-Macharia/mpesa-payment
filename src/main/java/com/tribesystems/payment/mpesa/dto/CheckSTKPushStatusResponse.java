@@ -3,6 +3,7 @@ package com.tribesystems.payment.mpesa.dto;
 public record CheckSTKPushStatusResponse(
         double ResponseCode,
         String ResponseDescription,
+        String MpesaReceipt,
         String MerchantRequestID,
         String CheckoutRequestID,
         String ResultCode,

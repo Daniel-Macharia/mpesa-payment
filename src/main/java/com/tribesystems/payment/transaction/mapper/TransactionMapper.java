@@ -19,10 +19,11 @@ public class TransactionMapper {
                 .transactionStatus(status)
                 .transactionType(TransactionType.MPESA)
                 .ResponseCode(resp.getResponseCode())
+                .ResponseDescription(resp.getResponseDescription())
                 .customerPhoneNumber(dto.phoneNumber())
                 .amount(dto.amount())
-                .resultCode(resp.getResponseCode() + "")
-                .resultDescription(resp.getResponseDescription())
+                .resultCode("-1")//This can only be set once mpesa processes the request
+                .resultDescription("-1")//This can as well only be set once mpesa processes the request
                 .build();
     }
 

@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.tribesystems.payment.common.dto.ApiResponse;
 import com.tribesystems.payment.mpesa.dto.*;
 import com.tribesystems.payment.common.utils.DateTimeUtil;
+import com.tribesystems.payment.transaction.mapper.MpesaTransactionMapper;
 import com.tribesystems.payment.transaction.mapper.TransactionMapper;
 import com.tribesystems.payment.transaction.model.*;
 import com.tribesystems.payment.transaction.repository.*;
@@ -104,6 +105,9 @@ public class MpesaService {
 
     @Autowired
     private PaymentReferenceGenerator paymentRefGenerator;
+
+    @Autowired
+    private MpesaConfirmedTransactionCallbackRepository mpesaConfirmedTransactionCallbackRepository;
 
     private final Logger logger = LoggerFactory.getLogger(MpesaService.class);
 
@@ -284,8 +288,29 @@ public class MpesaService {
                 return new ApiResponse<>(
                         500,
                         "failed",
-                        new CheckSTKPushStatusResponse(-1, null, null,
+                        new CheckSTKPushStatusResponse(-1, null, null,null,
                                 null, null, null)
+                );
+            }
+
+            /*
+            * First check whether the transaction is already confirmed by callback or not.
+            * */
+            Transaction transaction = txnRetrieved.get();
+            if(transaction.isConfirmedByMpesaCallback())
+            {
+                return new ApiResponse<>(
+                        200,
+                        "Success",
+                        new CheckSTKPushStatusResponse(
+                                transaction.getResponseCode(),
+                                transaction.getResponseDescription(),
+                                transaction.getMpesaReceiptNumber(),
+                                transaction.getMerchantRequestID(),
+                                transaction.getCheckoutRequestID(),
+                                transaction.getResultCode(),
+                                transaction.getResultDescription()
+                        )
                 );
             }
 
@@ -312,7 +337,7 @@ public class MpesaService {
                 return new ApiResponse<>(
                         500,
                         "failed",
-                        new CheckSTKPushStatusResponse(-1, null, null,
+                        new CheckSTKPushStatusResponse(-1, null, null,null,
                                 null, null, null)
                 );
             }
@@ -375,7 +400,7 @@ public class MpesaService {
                 return new ApiResponse<>(
                         500,
                         "failed",
-                        new CheckSTKPushStatusResponse(-1, null, null,
+                        new CheckSTKPushStatusResponse(-1, null, null, null,
                                 null, null, null)
                 );
             }
@@ -385,7 +410,7 @@ public class MpesaService {
             return new ApiResponse<>(
                     500,
                     "failed",
-                    new CheckSTKPushStatusResponse(-1, null, null,
+                    new CheckSTKPushStatusResponse(-1, null, null, null,
                             null, null,  null)
             );
         }
@@ -975,6 +1000,101 @@ public class MpesaService {
                     "failed",
                     new ArrayList<>()
             );
+        }
+    }
+
+
+    public void processStkPushCallback(StkCallback stkCallback)
+    {
+        try{
+            logger.info("Begin processing of STK push callback payload");
+            String initVal = DateTimeUtil.formatedDateTime();
+            String mpesaReceiptNumber = initVal;
+            String mpesaTransactionDate = initVal;
+            String mpesaTransactionPhoneNumber = initVal;
+            String mpesaTransactionAmount = initVal;
+
+            if(stkCallback.CallbackMetadata() != null )
+            {
+                if(stkCallback.CallbackMetadata().Item() != null)
+                {
+                    for(CallbackMetadataItem item : stkCallback.CallbackMetadata().Item())
+                    {
+                        if(item.Name() != null && !item.Name().isBlank() && item.Name().equals("MpesaReceiptNumber"))
+                        {
+                            logger.info("================================= STK push callback contains mpesa receipt number =================================");
+                            mpesaReceiptNumber = item.Value();
+                        }
+
+                        if(item.Name() != null && !item.Name().isBlank() && item.Name().equals("TransactionDate"))
+                        {
+                            logger.info("================================= STK push callback contains mpesa transaction date =================================");
+                            mpesaTransactionDate = item.Value();
+                        }
+
+                        if(item.Name() != null && !item.Name().isBlank() && item.Name().equals("PhoneNumber"))
+                        {
+                            logger.info("================================= STK push callback contains phone number =================================");
+                            mpesaTransactionPhoneNumber = item.Value();
+                        }
+
+                        if(item.Name() != null && !item.Name().isBlank() && item.Name().equals("Amount"))
+                        {
+                            logger.info("================================= STK push callback contains amount =================================");
+                            mpesaTransactionAmount = item.Value();
+                        }
+                    }
+
+
+
+                    MpesaConfirmedTransactionCallback mpesaTxn = MpesaTransactionMapper.stkCallbackToMpesaConfirmedTransactionCallback(
+                            stkCallback,
+                            mpesaTransactionAmount,
+                            mpesaReceiptNumber,
+                            mpesaTransactionDate,
+                            mpesaTransactionPhoneNumber
+                    );
+
+                    logger.info("================================= Saving mpesa stk callback as mpesaConfirmedTransactionCallback =================================");
+                    mpesaConfirmedTransactionCallbackRepository.save(mpesaTxn);
+                    logger.info("================================= After saving mpesa stk callback as mpesaConfirmedTransactionCallback =================================");
+                }
+                else{
+                    logger.warn("================================= STK push callback does not contain mpesa CallbackMetadata.Item =================================");
+                }
+            }
+            else{
+                logger.warn("================================= STK push callback does not contain mpesa CallbackMetadata =================================");
+            }
+
+
+            logger.info("================================= MpesaTransactionReceipt: {} =================================", mpesaReceiptNumber);
+            logger.info("================================= MpesaTransactionDate: {} =================================", mpesaTransactionDate);
+            logger.info("================================= MpesaTransactionPhoneNumber: {} =================================", mpesaTransactionPhoneNumber);
+            logger.info("================================= MpesaTransactionAmount: {} =================================", mpesaTransactionAmount);
+
+            Optional<Transaction> trans = transactionRepository.findByCheckoutRequestID(stkCallback.CheckoutRequestID());
+
+            if( trans.isPresent() )
+            {
+                logger.info("================================= Transaction with specified checkout request id exists =================================");
+                Transaction txn = trans.get();
+                txn.setMpesaReceiptNumber(mpesaReceiptNumber);
+                txn.setConfirmedByMpesaCallback(true);
+                txn.setResultCode("" + stkCallback.ResultCode());
+                txn.setResultDescription(stkCallback.ResultDesc());
+                logger.info("================================= updating the transaction mpesa receipt number =================================");
+                transactionRepository.save(txn);
+                logger.info("================================= successfully updated the transaction mpesa receipt number =================================");
+            }
+            else{
+                logger.warn("================================= No transaction with the specified checkout request ID exists ! =================================");
+            }
+        }catch(Exception e)
+        {
+            logger.error("Error: Failed to process STK push callback");
+            logger.error("Reason: {}", e.getMessage());
+            logger.error("{}", e.getStackTrace());
         }
     }
 }
